@@ -8,9 +8,8 @@
 \ #    This file is part of the cross compile step:                             #
 \ #       gforth cross.fs basewords.fs nuc.fs                                   #
 \ #                                                                             #
-\ #    Single colon definitions (:) are appended to the host system's word list #
-\ #    list.                                                                    #
-\ #    Double colon definitions (::) are appended to the target sysyem's word   #
+\ #    Single colon definitions (:) are added to the host system's word list.   #
+\ #    Double colon definitions (::) are added to the target system's word      #
 \ #    list.                                                                    #
 \ #                                                                             #
 \ ###############################################################################
@@ -18,51 +17,6 @@
 \ #   April 17, 2019 - Dirk Heisswolf                                           #
 \ #      - Initial release                                                      #
 \ ###############################################################################
-
-( J1 base words implemented in assembler     JCB 17:27 12/31/11)
-
-: T         h# 0000 ;
-: N         h# 0100 ;
-: T+N       h# 0200 ;
-: T&N       h# 0300 ;
-: T|N       h# 0400 ;
-: T^N       h# 0500 ;
-: ~T        h# 0600 ;
-: N==T      h# 0700 ;
-: N<T       h# 0800 ;
-: T2/       h# 0900 ;
-: T2*       h# 0a00 ;
-: rT        h# 0b00 ;
-: N-T       h# 0c00 ;
-: io[T]     h# 0d00 ;
-: status    h# 0e00 ;
-: Nu<T      h# 0f00 ;
-
-: T->N      h# 0010 or ;
-: T->R      h# 0020 or ;
-: N->[T]    h# 0030 or ;
-: N->io[T]  h# 0040 or ;
-: _IORD_    h# 0050 or ;
-: RET       h# 0080 or ;
-
-: d-1       h# 0003 or ;
-: d+1       h# 0001 or ;
-: r-1       h# 000c or ;
-: r-2       h# 0008 or ;
-: r+1       h# 0004 or ;
-
-: ubranch   h# c000 or tcode, ; \ jump
-: scall     h# 4000 or tcode, ; \ call
-: 0branch   h# 2000 or tcode, ; \ conditional branch
-: imm       h# 1000 or tcode, ; \ literal
-: alu_sc    h# 0c00 or tcode, ; \ ALU instruction with single cell result
-: alu_dc    h# 0800 or tcode, ; \ ALU instruction with double cell result
-: stack     h# 0400 or tcode, ; \ stack instruction
-: memrd     h# 0300 or tcode, ; \ memory read
-: memwr     h# 0200 or tcode, ; \ memory write
-: cctrl     h# 0100 or tcode, ; \ concurrent control instructions
-: nccttl    h# 0000 or tcode, ; \ non-concurrent control instructions
-
 
 \ Instruction types
 : jump                   h# c000           ; \ jump
@@ -77,25 +31,28 @@
 : ctrl_cc                h# 0100           ; \ concurrent control instructions
 : cttl_nc                h# 0000           ; \ non-concurrent control instructions
 
-\ Branch addresses
-: branch_skip1           h# 0001 or tcode, ; skip over one instruction 
+\ Jump or call addresses (absolute)
+: jump_ind               h# 3fff or tcode, ; \ address is on the top of the parameter stack
+
+\ Branch addresses (relative)
+: branch_skip1           h# 0001 or tcode, ; skip over one instruction
 
 \ ALU operators
-: alu_n+t                h# 0000 or        ; \ plus        
-: alu_abs                h# 0020 or        ; \ absolute value        
-: alu_t-n                h# 0040 or        ; \ minus (reversed order)   
+: alu_n+t                h# 0000 or        ; \ plus
+: alu_abs                h# 0020 or        ; \ absolute value
+: alu_t-n                h# 0040 or        ; \ minus (reversed order)
 : alu_n-t                h# 0060 or        ; \ minus
 : alu_umin               h# 0080 or        ; \ unsigned minimum
 : alu_max                h# 00a0 or        ; \ signed maximum
 : alu_umax               h# 00c0 or        ; \ unsigned maximum
 : alu_min                h# 00e0 or        ; \ signed minimum
-: alu_t=n                h# 0100 or        ; \ equals comparison (unsigned)  
+: alu_t=n                h# 0100 or        ; \ equals comparison (unsigned)
 : alu_n=t                h# 0120 or        ; \ equals comparison (signed)
-: alu_t<>n               h# 0140 or        ; \ not-equals comparison (unsigned)   
+: alu_t<>n               h# 0140 or        ; \ not-equals comparison (unsigned)
 : alu_n<>t               h# 0160 or        ; \ not-equals comparison (signed)
-: alu_t<n                h# 0180 or        ; \ unsigned lower-than comparison   
+: alu_t<n                h# 0180 or        ; \ unsigned lower-than comparison
 : alu_n<t                h# 01a0 or        ; \ signed ower-than comparison
-: alu_t>n                h# 01c0 or        ; \ unsigned greater-than comparison   
+: alu_t>n                h# 01c0 or        ; \ unsigned greater-than comparison
 : alu_n>t                h# 01e0 or        ; \ signed greater-than comparison
 : alu_umul               h# 0200 or        ; \ unsigned multiplication
 : alu_smul               h# 0260 or        ; \ signed multiplication
@@ -108,7 +65,7 @@
 : alu_lit                h# 0380 or        ; \ set upper bibble of a literal value
 
 \ ALU operands
-: alu_ind                h# 0000 or tcode, ; \ both operands are located on the parameter stack
+: alu_ind                h# 0000 or tcode, ; \ both operands are on the parameter stack
 : alu_simm_-1            h# 001f or tcode, ; \ -1 in oimm format
 : alu_oimm_0             h# 0010 or tcode, ; \ 0 in oimm format
 : alu_uimm_1             h# 0001 or tcode, ; \ 1 in uimm format
@@ -141,39 +98,50 @@
 : <-P3<>P2__P1<>P0______ h# 0398 or tcode, ; \ copy P3, swap P0 with P1 and swap P2 with P3
 
 \ Memory addresses
-: mem_ind   h# 00ff or tcode,    ;        \ address is located at the top of the parameter stack
+: mem_ind                h# 00ff or tcode, ; \ address is on the top of the parameter stack
+
+\ Control instructions
+: ctrl_get_psph          h# 00ff or tcode, ; \ fetch PSP (= depth)
 
 \ Machine instructions
-:: !		mem_wr	   	  mem_ind	; \ store x at addr ( x addr -- ) 
-:: *            alu_sc	alu_umul  alu_ind	; \ multiply n1|u1 by n2|u2 ( n1|u1 n2|u2 -- n3|u3 )   		   	     	     
-:: +            alu_sc	alu_n+t   alu_ind     	; \ add n1|u1 to n2|u2 ( n1|u1 n2|u2 -- n3|u3 )   	     								     
+:: !            mem_wr            mem_ind       ; \ store x at addr ( x addr -- )
+:: *            alu_sc  alu_umul  alu_ind       ; \ multiply n1|u1 by n2|u2 ( n1|u1 n2|u2 -- n3|u3 )
+:: +            alu_sc  alu_n+t   alu_ind       ; \ add n1|u1 to n2|u2 ( n1|u1 n2|u2 -- n3|u3 )
 :: +!           stack   ______________P0->R0->    \ add n1|u1 to the cell at addr ( n1|u1 a-adr -- )
                 mem_rd            mem_ind
                 alu_sc  alu_n+t   alu_ind
                 stack   <-P3<-P2<-P1<-P0<-R0<-
-                mem_wr	   	  mem_ind	;
-:: -            alu_sc  alu_n-t   alu_ind       ; \ subtract n2|u2 from n1|u1 ( n1|u1 n2|u2 -- n3|u3 ) 
+                mem_wr            mem_ind       ;
+:: -            alu_sc  alu_n-t   alu_ind       ; \ subtract n2|u2 from n1|u1 ( n1|u1 n2|u2 -- n3|u3 )
 :: -2rot        stack   ______P2<>P1__________    \ rotate three cell pairs ( x1 x2 x3 x4 x5 x6 -- x5 x6 x1 x2 x3 x4 )
-   		stack   __P3<>P2__P1<>P0______
+                stack   __P3<>P2__P1<>P0______
                 stack   ->P3->P2->P1->P0->R0->
-   		stack   __P3<>P2__P1<>P0______
+                stack   __P3<>P2__P1<>P0______
                 stack   ->P3->P2->P1->P0->R0->
-   		stack   __P3<>P2__P1<>P0______
+                stack   __P3<>P2__P1<>P0______
                 stack   <-P3<-P2<-P1<-P0<-R0<-
-   		stack   __________P1<>P0______
+                stack   __________P1<>P0______
                 stack   <-P3<-P2<-P1<-P0<-R0<-  ;
 :: -rot         stack   __________P1<>P0______    \ rotate the three topmost cells ( x1 x2 x3 -- x3 x1 x2)
-                stack   ______P2<>P1__________  ; 
+                stack   ______P2<>P1__________  ;
 :: 0<           alu_sc  alu_n<t   alu_oimm_0    ; \ test if n is negative ( n -- flag )
 :: 0<>          alu_sc  alu_n<>t  alu_oimm_0    ; \ test if x is not zero ( x -- flag )
 :: 0>           alu_sc  alu_n>t   alu_oimm_0    ; \ test if n is greater than zero ( n -- flag )
 :: 0=           alu_sc  alu_n=t   alu_oimm_0    ; \ test if x is not zero ( x -- flag )
 :: 1+           alu_sc  alu_n+t   alu_uimm_1    ; \ increment n1|u1 ( n1|u1 -- n2|u2 )
 :: 1-           alu_sc  alu_t-n   alu_uimm_1    ; \ decrement n1|u1 ( n1|u1 -- n2|u2 )
-:: 2!           alu_sc                	        ; \ store x2 at addr and x1 at addr+1 ( x1 x2 addr --  )
-:: 2*           alu_sc   alu_lsl  alu_uimm_1    ; \ shift x1 one bit towards the MSB ( x1 -- x2 )
-:: 2/           alu_sc   alu_asr  alu_uimm_1    ; \ shift x1 one bit towards the LSB ( x1 -- x2 )
-:: 2@           alu_sc                          ; \ fetch x2 from addr and x1 at addr+1 ( addr -- x1 x2 )
+:: 2!           stack   <-P3<-P2<-P1<-P0______    \ store x2 at addr and x1 at addr+1 ( x1 x2 addr --  )
+                stack   ______P2<>P1__________
+                memwr             mem_ind
+                alu_sc  alu_n+t   alu_uimm_1
+                memwr             mem_ind       ;
+:: 2*           alu_sc  alu_lsl   alu_uimm_1    ; \ shift x1 one bit towards the MSB ( x1 -- x2 )
+:: 2/           alu_sc  alu_asr   alu_uimm_1    ; \ shift x1 one bit towards the LSB ( x1 -- x2 )
+:: 2@           stack   <-P3<-P2<-P1<-P0______    \ fetch x2 from addr and x1 at addr+1 ( addr -- x1 x2 )
+                alu_sc  alu_n+t   alu_uimm_1
+                memrd             mem_ind
+                stack   __________P1<>P0______
+                memrd             mem_ind       ;
 :: 2drop        stack   ->P3->P2->P1->P0______    \ drop cell pair x1 x2 ( x1 x2 -- )
                 stack   ->P3->P2->P1->P0______  ;
 :: 2dup         stack   <-P3<-P2<-P1<>P0______    \ duplicate cell pair x1 x2 ( x1 x2 -- x1 x2 x1 x2 )
@@ -183,7 +151,7 @@
 :: 2over        stack   <-P3<>P2______________    \ copy cell pair x1 x2 to the TOS ( x1 x2 x3 x4 -- x1 x2 x1 x2 x3 x4 x1 x2 )
                 stack   ______P2<>P1__________
                 stack   <-P3<>P2__P1<>P0______    \ copy cell pair x1 x2 to the TOS ( x1 x2 x3 x4 -- x1 x2 x1 x2 x3 x4 x1 x2 )
-                stack   ______P2<>P1__________  ;  
+                stack   ______P2<>P1__________  ;
 :: 2tuck        stack   ______P2<>P1->P0->R0->    \ copy cell pair x3 x4 below x2 cell pair x1 x2( x1 x2 x3 x4 -- x3 x4 x1 x2 x3 x4 )
                 stack   __P3<>P2______P0<>R0->
                 stack   __________P1<>P0______
@@ -220,21 +188,22 @@
 :: >            alu_sc  alu_n>t   alu_ind       ; \ test if n1 is greater than n2 ( n1 n2 -- flag )
 :: >r           stack   ->P3->P2->P1->P0->R0->  ; \ shift x on to the RS ( x -- ) (R: -- x )
 :: ?dup         stack   <-P3<-P2<-P1<-P0______    \ duplicate x if it is not zero ( x -- 0|x x )
+                alu_sc  alu_n=t   alu_oimm_0
                 branch  branch_skip1
                 stack   ->P3->P2->P1->P0______  ;
-:: @            mem_rd                          ; \ fetch x from addr ( addr -- x )
-:: abs          alu_sc                          ; \ absolute vale of n ( n -- u )
-:: and          alu_sc                          ; \ bitwise logic AND of x1 and x2 ( x1 x2 -- x3 )
-:: cell+        alu_sc                          ; \ increment addr1 ( addr1 -- -addr2 )
-:: depth        ctrl_nc                         ; \ +n is the number of cells on the \gls{ps} without +n ( -- +n )
+:: @            mem_rd            mem_ind       ; \ fetch x from addr ( addr -- x )
+:: abs          alu_sc  alu_abs   alu_ind       ; \ absolute vale of n ( n -- u )
+:: and          alu_sc  alu_and   alu_ind       ; \ bitwise logic AND of x1 and x2 ( x1 x2 -- x3 )
+:: cell+        alu_sc  alu_n+t   alu_uimm_1    ; \ increment addr1 ( addr1 -- -addr2 )
+:: depth        ctrl_nc           ctrl_get_psp  ; \ +n is the number of cells on the \gls{ps} without +n ( -- +n )
 :: drop         stack   ->P3->P2->P1->P0______  ; \ drop x from the /gls{ps} ( x -- )
 :: dup          stack   <-P3<-P2<-P1<-P0______  ; \ duplicate x ( x -- x x )
-:: execute      call                            ; \ execute xt ( $i*$x xt -- $j*$x )
+:: execute      call                  jump_ind  ; \ execute xt ( $i*$x xt -- $j*$x )
 :: false        lit     lit_false               ; \ FALSE flag ( -- false )
 :: invert       alu_sc  alu_xor   alu_simm_-1   ; \ bitwise inverse of x1 ( x1 -- x2 )
 :: lshift       alu_sc  alu_lsl   alu_ind       ; \ shift x1 u bits towards the MSB ( x1 u -- x2 )
-:: m*           alu_dc                          ; \ multiply n1 by n2 ( n1 n2 -- d )
-:: m+           alu_dc                          ; \ Add n1 to n2 ( n1 n2 -- d )
+:: m*           alu_dc  alu_smul  alu_ind       ; \ multiply n1 by n2 ( n1 n2 -- d )
+:: m+           alu_dc  alu_n+t   alu_ind       ; \ Add n1 to n2 ( n1 n2 -- d )
 :: max          alu_sc  alu_max   alu_ind       ; \ n3 is the greater of n1 and n2 ( n1 n2 -- n3 )
 :: min          alu_sc  alu_min   alu_ind       ; \ n3 is the lesser of n1 and n2 ( n1 n2 -- n3 )
 :: negate       alu_sc  alu_n-t   alu_oimm_0    ; \ n2 is the two's complement of n1 ( n1 -- n2 )
@@ -249,7 +218,7 @@
                 stack   ______________P0<>R0__  ;
 :: rshift       alu_sc  alu_lsr   alu_ind       ; \ shift x1 u bits towards the LSB ( x1 u -- x2 )
 :: rot          stack   ______P2<>P1__________    \ rotate the three topmost cells ( x1 x2 x3 -- x2 x3 x1)
-                stack   __________P1<>P0______  ; 
+                stack   __________P1<>P0______  ;
 :: s>d          alu_dc                          ; \ sign-extend n ( n -- d )
 :: swap         stack   __________P1<>P0______  ; \ swap x1 and x2 ( x1 x2 -- x2 x1 )
 :: true         lit     lit_true                ; \ TRUE flag ( -- true )
@@ -259,60 +228,3 @@
 :: u>           alu_sc  alu_t<n   alu_ind       ; \ test if u1 is greater than u2 ( u1 u2 -- flag)
 :: um*          alu_dc                          ; \ multiply u1 by u2 ( u1 u2 -- d )
 :: xor          alu_sc  alu_xor   alu_ind       ; \ bitwise logic XOR of x1 and x2 ( x1 x2 -- x3 )
-
-:: noop      T                       alu ;
-:: +         T+N                 d-1 alu ;
-:: -         N-T                 d-1 alu ;
-:: xor       T^N                 d-1 alu ;
-:: and       T&N                 d-1 alu ;
-:: or        T|N                 d-1 alu ;
-:: invert    ~T                      alu ;
-:: =         N==T                d-1 alu ;
-:: <         N<T                 d-1 alu ;
-:: u<        Nu<T                d-1 alu ;
-:: swap      N     T->N              alu ;
-:: dup       T     T->N          d+1 alu ;
-:: drop      N                   d-1 alu ;
-:: over      N     T->N          d+1 alu ;
-:: nip       T                   d-1 alu ;
-:: >r        N     T->R      r+1 d-1 alu ;
-:: r>        rT    T->N      r-1 d+1 alu ;
-:: r@        rT    T->N          d+1 alu ;
-:: io@       T     _IORD_            alu
-             io[T]                   alu ;
-:: !         
-             T     N->[T]        d-1 alu
-             N                   d-1 alu ;
-:: io!       
-             T     N->io[T]      d-1 alu
-             N                   d-1 alu ;
-:: 2/        T2/                     alu ;
-:: 2*        T2*                     alu ;
-:: depth     status T->N         d+1 alu ;
-:: exit      T  RET              r-1 alu ;
-:: hack      T      N->io[T]         alu ;
-
-\ Elided words
-\ These words are supported by the hardware but are not
-\ part of ANS Forth.  They are named after the word-pair
-\ that matches their effect  
-\ Using these elided words instead of
-\ the pair saves one cycle and one instruction.
-
-:: 2dupand   T&N   T->N          d+1 alu ;
-:: 2dup<     N<T   T->N          d+1 alu ;
-:: 2dup=     N==T  T->N          d+1 alu ;
-:: 2dupor    T|N   T->N          d+1 alu ;
-:: 2dup+     T+N   T->N          d+1 alu ;
-:: 2dupu<    Nu<T  T->N          d+1 alu ;
-:: 2dupxor   T^N   T->N          d+1 alu ;
-:: dup>r     T     T->R      r+1     alu ;
-:: overand   T&N                     alu ;
-:: over>     N<T                     alu ;
-:: over=     N==T                    alu ;
-:: overor    T|N                     alu ;
-:: over+     T+N                     alu ;
-:: overu>    Nu<T                    alu ;
-:: overxor   T^N                     alu ;
-:: rdrop     T                   r-1 alu ;
-:: tuck!     T     N->[T]        d-1 alu ;
