@@ -74,33 +74,20 @@ warnings off
 :: [else]       postpone [else] ;
 :: [then]       postpone [then] ;
 
-\ : literal
-\     \ dup $f rshift over $e rshift xor 1 and throw
-\     dup h# 8000 and if
-\         h# ffff xor recurse
-\         ~T alu
-\     else
-\         h# 8000 or tcode,
-\     then
-\ ;
-\ 
-\ : literal
-\     dup $8000 and if
-\         invert recurse
-\         ~T alu
-\     else
-\         $8000 or tcode,
-\     then
-\ ;
-
 : literal
-      dup $F800 and ?dup if
-          $          
-
+      dup $0fff and lit or tcode,                       \ compile plain literal instruction -- n1
+      $f800 and dup if                                  \ check if the value exceeds the 12-bit range -- n2 
+          dup $f800 xor if                              \ check if the value falls below the 12-bit range -- n2
+	      dup 12 rshift alu_sc alu_lit or or tcode, \ compile extended literal instruction   
+          then                                          \
+      then                                              \
+      drop                                              \ clean up stack
+;
 
 ( Defining words for target                  JCB 19:04 05/02/12)
 
-: codeptr   tdp @ 2/ ;  \ target data pointer as a jump address
+\ target data pointer as a jump address
+: codeptr   tdp @ 2/ ;
 
 : wordstr ( "name" -- c-addr u )
     >in @ >r bl word count r> >in !
@@ -145,8 +132,13 @@ variable wordstart
 
     there wordstart !
     create  codeptr ,
-    does>   @ scall
-
+    does>
+        @                   \ -- target 
+        dup $c000 and if    \ check if address is within the direct address range -- target
+	    literal execute \ use inirect addressing
+        else                \
+            call or tcode,  \ use direct addressing
+        then                \
 ;
 
 :: :noname
@@ -163,37 +155,45 @@ variable wordstart
     loop
 ;
 
-: shortcut ( orig -- f ) \ insn @orig precedes ;. Shortcut it.
-    \ call becomes jump
-    dup t@ h# e000 and h# 4000 = if
-        dup t@ h# 1fff and over tw!
-        true
-    else
-        dup t@ h# e00c and h# 6000 = if
-            dup t@ h# 0080 or r-1 over tw!
-            true
-        else
-            false
-        then
-    then
-    nip
-;
+\ Shortcut implicetely done for the N1
+\ : shortcut ( orig -- f ) \ insn @orig precedes ;. Shortcut it.
+\     \ call becomes jump
+\     dup t@ h# e000 and h# 4000 = if
+\         dup t@ h# 1fff and over tw!
+\         true
+\     else
+\         dup t@ h# e00c and h# 6000 = if
+\             dup t@ h# 0080 or r-1 over tw!
+\             true
+\         else
+\             false
+\         then
+\     then
+\     nip
+\ ;
+\ 
+\ :: ;
+\     tdp @ wordstart @ = if
+\         s" exit" evaluate
+\     else
+\         tdp @ 2 - shortcut \ true if shortcut applied
+\         tdp @ 0 do
+\             i tbranches @ tdp @ = if
+\                 i tbranches @ shortcut and
+\             then
+\         loop
+\         0= if   \ not all shortcuts worked
+\             s" exit" evaluate
+\         then
+\     then
+\ ;
 
 :: ;
-    tdp @ wordstart @ = if
-        s" exit" evaluate
-    else
-        tdp @ 2 - shortcut \ true if shortcut applied
-        tdp @ 0 do
-            i tbranches @ tdp @ = if
-                i tbranches @ shortcut and
-            then
-        loop
-        0= if   \ not all shortcuts worked
-            s" exit" evaluate
-        then
-    then
-;
+     tdp @ wordstart @ = if
+         ret stack or ______________________ \ compile explicit reurn instruction	 
+     else
+         there 2 - tw@ ret or there 2 -tw!   \ set return bit in last compiled instruction 
+     then
 
 :: ;fallthru ;
 
@@ -278,15 +278,15 @@ warnings on
 ( Conditionals                               JCB 13:12 09/03/10)
 
 : resolve ( orig -- )
-    \ forward reference from orig to this loc
-    tdp @                  \ -- resolvable-addr 0 data-pointer
-    over                   \ -- resolvable-addr 0 data-pointer 0
-    tbranches              \ -- resolvable-addr 0 data-pointer branch-list
-    !                      \ -- store data-pointer in branch ltst -- resolvable-addr 0
-    dup                    \ -- resolvable-addr 0 0
-
-    tdp @ over tbranches ! 
-    dup t@ tdp @ 2/ or swap tw!
+    \ forward reference from orig to this loc (tgt)
+    tdp @                  \ -- orig tgt
+    over                   \ -- orig tgt orig
+    tbranches !            \ store tgt in branch list -- orig
+    dup                    \ -- orig orig
+    t@                     \ -- orig opcode
+    tdp @                  \ -- orig opcode tgt
+    2/ or                  \ -- orig resolved-opcode
+    swap tw!               \ resolve opcode --
 ;
 
 :: if

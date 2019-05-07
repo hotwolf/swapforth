@@ -29,13 +29,16 @@
 : mem_rd                 h# 0300           ; \ memory read
 : mem_wr                 h# 0200           ; \ memory write
 : ctrl_cc                h# 0100           ; \ concurrent control instructions
-: cttl_nc                h# 0000           ; \ non-concurrent control instructions
+: ctrl_nc                h# 0000           ; \ non-concurrent control instructions
+
+\ Return bit
+: ret                    h# 8000           ; \ return from call
 
 \ Jump or call addresses (absolute)
 : jump_ind               h# 3fff or tcode, ; \ address is on the top of the parameter stack
 
 \ Branch addresses (relative)
-: branch_skip1           h# 0001 or tcode, ; skip over one instruction
+: branch_skip1           h# 0002 or tcode, ; skip over one instruction
 
 \ ALU operators
 : alu_n+t                h# 0000 or        ; \ plus
